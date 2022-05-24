@@ -1,0 +1,11 @@
+
+
+It took 1134 seconds to enroll 1436 users concurrently using 3 go routines
+There are 7 errors occurred when processing 1436 records
+NORMALIZE_IMAGE error: Cant normalize data\images\img.00239.jpg
+NORMALIZE_IMAGE error: Cant normalize data\images\img.00644.jpg
+NORMALIZE_IMAGE error: Cant normalize data\images\img.00681.jpg
+NORMALIZE_IMAGE error: Cant normalize data\images\img.00792.jpg
+NORMALIZE_IMAGE error: Cant normalize data\images\img.00824.jpg
+NORMALIZE_IMAGE error: Cant normalize data\images\img.00992.jpg
+NORMALIZE_IMAGE error: Cant normalize data\images\img.01144.jpg

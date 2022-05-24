@@ -1,0 +1,148 @@
+//usersFile := flag.String("users", "data/users/users.csv", "Specify CSV file with users to enroll")
+//fmt.Printf("%-35s %-20s\n", "File with users to enroll:", *usersFile)
+
+fmt.Printf("Trying to extract template from image %v for user %v ...", imgFile, uid)
+	respExt, err := FaceClient.Extract(context.Background(), &face.ExtractRequest{
+		DeviceID:  deviceId,
+		ImageData: respNorm.GetWrappedImageData(),
+		IsWarped:  false,
+	})
+	if err != nil {
+		return err
+	}
+
+func testIgor() {
+	resFace, err := userClient.GetFace(context.Background(), &user.GetFaceRequest{
+		DeviceID: f2id,
+		UserIDs:  []string{"2"},
+	})
+	ifErrorExitElseOk(err)
+	igorFaces := resFace.GetUserFaces()
+	igorFace := igorFaces[0]
+	igorDataFaces := igorFace.GetFaces()
+	igorFaceData := igorDataFaces[0]
+	igorFaceData.GetImageData() // []byte
+
+	img, _, err := image.Decode(bytes.NewReader(igorFaceData.GetImageData()))
+	if err != nil {
+		fmt.Println("e1", err)
+	}
+	out, err := os.Create("data/users/Igor-F2.jpg")
+	if err != nil {
+		fmt.Println("e2", err)
+	}
+	err = jpeg.Encode(out, img, nil)
+	if err != nil {
+		fmt.Println("e3", err)
+	}
+
+	reader, err := os.Open("data/users/IgorFromBiostar.jpg")
+	defer reader.Close()
+	imgBiostar, err := jpeg.Decode(reader)
+	//buf := new(bytes.Buffer)
+	buf := bytes.NewBuffer([]byte{})
+	jpeg.Encode(buf, imgBiostar, nil)
+	imgDataFromBiostar := buf.Bytes()
+
+	// compare igorFaceData.GetImageData() and buf.Bytes()
+	pc := base64.StdEncoding.EncodeToString(imgDataFromBiostar)
+	f2 := base64.StdEncoding.EncodeToString(igorFaceData.GetImageData())
+	os.WriteFile("data/users/fromBiostar.txt", []byte(pc), 0644)
+	os.WriteFile("data/users/fromF2.txt", []byte(f2), 0644)
+
+	for i, _ := range pc {
+		if pc[i] != f2[i] {
+			fmt.Println("Images differ at index", i)
+			fmt.Printf("Length PC=%d\nLength F2=%d\n", len(pc), len(f2))
+			break
+		}
+	}
+
+}
+
+/*  rpc error: code = Internal desc = Packet error: 65335: Async packet error: Packet error: BS_ERR_INVALID_PACKET {StartCode:[123 123 60 60] Checksum:0 DeviceID:
+543664380 Flag:3 Version:3 SequenceNO:1 Index:0 TotalNo:0 PayloadSize:0 Code:65335 Command:BS2_CMD_SET_USER Param1:0 Param2:0}
+*/
+func enrollVisualFace2(imgData []byte) {
+
+	fmt.Printf("setting up face record for image %v ...", imgFile)
+
+	// try to normalize it first to see if this helps
+	respExt, err := faceClient.Extract(context.Background(), &face.ExtractRequest{
+		DeviceID:  f2id,
+		ImageData: imgData,
+		IsWarped:  false,
+	})
+	ifErrorExitElseOk(err)
+
+	respNorm, err := faceClient.Normalize(context.Background(), &face.NormalizeRequest{
+		DeviceID:           f2id,
+		UnwrappedImageData: imgData,
+	})
+	ifErrorExitElseOk(err)
+
+	respScan, err := faceClient.Scan(context.Background(), &face.ScanRequest{
+		DeviceID:        f2id,
+		EnrollThreshold: face.FaceEnrollThreshold_BS2_FACE_ENROLL_THRESHOLD_DEFAULT,
+	})
+	ifErrorExitElseOk(err)
+	faceData := respScan.GetFaceData()
+
+	templateData := make([][]byte, 1)
+	templateData[0] = respExt.GetTemplateData()
+
+	faceRec := &face.FaceData{
+		Flag:      uint32(face.FaceFlag_BS2_FACE_FLAG_F2),
+		Templates: templateData,
+		ImageData: respNorm.GetWrappedImageData(),
+	}
+	faceRec.GetImageData()
+
+	userFace := &user.UserFace{
+		UserID: uid,
+		//Faces:  []*face.FaceData{faceRec},
+		Faces: []*face.FaceData{faceData},
+	}
+	faceReq := &user.SetFaceRequest{
+		DeviceID:  f2id,
+		UserFaces: []*user.UserFace{userFace},
+	}
+	_, err = userClient.SetFace(context.Background(), faceReq)
+	ifErrorExitElseOk(err)
+
+	fmt.Printf("faceData.GetIndex()=%v\n", faceData.GetIndex())
+	fmt.Printf("faceData.GetFlag()=%v\n", faceData.GetFlag())
+	fmt.Printf("faceData.GetTemplates()=%v\n", faceData.GetTemplates())
+	fmt.Printf("faceData.GetImageData()=%v\n", faceData.GetImageData())
+	fmt.Printf("faceData.GetIrTemplates()=%v\n", faceData.GetIrTemplates())
+	fmt.Printf("faceData.GetIrImageData()=%v\n", faceData.GetIrImageData())
+
+	// ----------------------------------------------- 2nd user enrollment
+	fmt.Printf("Enrolling user id %v into F2 %v ...", "Igor2", f2id) // works Ok
+	req := &user.EnrollRequest{
+		DeviceID: f2id,
+		Users: []*user.UserInfo{
+			&user.UserInfo{
+				Hdr:     &user.UserHdr{ID: "Igor2", NumOfFace: 0},
+				Setting: &user.UserSetting{FaceAuthExtMode: uint32(auth.AuthMode_AUTH_EXT_MODE_FACE_ONLY)},
+				Name:    fmt.Sprintf("User-%s", "Igor2"),
+				//Photo:   imgData,
+			},
+		},
+		Overwrite: true,
+	}
+	_, err = userClient.Enroll(context.Background(), req)
+	ifErrorExitElseOk(err)
+
+	userFace = &user.UserFace{
+		UserID: "Igor2",
+		Faces:  []*face.FaceData{faceData},
+	}
+	faceReq = &user.SetFaceRequest{
+		DeviceID:  f2id,
+		UserFaces: []*user.UserFace{userFace},
+	}
+	_, err = userClient.SetFace(context.Background(), faceReq)
+	ifErrorExitElseOk(err)
+
+}
